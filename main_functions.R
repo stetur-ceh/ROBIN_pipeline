@@ -801,3 +801,78 @@ denclust <- function(dateline, bwi, daysNotSeconds=TRUE, M=500, plotnow=TRUE,
               kdav=kdav)
   )
 }
+
+##Extract Pots###
+                                        extractPeaksX <- function (vecTime = NULL, vecObs, mintimeDiff = 73, thrConst = (2/3), threshold = 0) 
+{
+  #### Version of ilaprosUtils::extractPeaks without needing the rest of the package ####
+  # vecTime     vector of equally spaced timepoints when observations occured
+  # vecObs      vector of observations (e.g. daily max flow)
+  # minTimeDiff number of timesteps allowed between peaks
+  # thrConst    relative size of trough between valid peaks
+  # threshold   minimum size of peak
+  ####
+  # outputs a vector of 0/1 with 1 indicating peak at relative timepoint in vecObs.
+  ####
+  require("pastecs")
+  if (is.null(vecTime)){
+    vecTime <- seq_along(vecObs)
+  }
+  if (!is.numeric(vecTime)){
+    warning("Time should be numeric")
+  }
+  tt <- as.data.frame(cbind(vecTime, vecObs))
+  names(tt) <- c("time", "obs")
+  tt <- tt[order(tt$time), ]
+  cc <- pastecs:::turnpoints(tt$obs)
+  subF <- as.data.frame(cbind(tt$time[cc$pos], tt$obs[cc$pos], 
+                              cc$peaks, cc$pits))
+  names(subF) <- c("time", "flow", "peak", "pit")
+  keep <- rep(0, nrow(subF))
+  ObsEA <- seq(1, nrow(tt))[-cc$pos]
+  obsPeaks <- (seq(1, nrow(subF))[(subF$peak == 1) &
+                                    (subF$flow >= threshold)])
+  obsPits <- (seq(1, nrow(subF))[subF$pit == 1])
+  keep[obsPeaks[1]] <- 1
+  for (i in 2:length(obsPeaks)) {
+    noww <- obsPeaks[i]
+    prev <- tryCatch({
+      max(obsPeaks[1:(i - 1)][obsPeaks[1:(i - 1)] %in% 
+                                seq(1, length(keep))[keep == 1]])
+    },
+    error=\(e){browser()},
+    warning=\(w){browser()}
+    )
+    keep[noww] <- 1
+    tp <- subF$time[prev]
+    fp <- subF$flow[prev]
+    tn <- subF$time[noww]
+    fn <- subF$flow[noww]
+    if (fn == fp){ 
+      smallest <- prev
+    }else{
+      smallest <- c(prev, noww)[
+        !c(prev, noww) %in% seq(prev, noww)[
+          max.col(t(subF[prev:noww, 2]), ties.method="first")]]
+      
+      w <- which(subF[prev:noww, 2] == max(subF[prev:noww, 2]))
+      if(length(w) != 1){
+        browser()
+      }
+      
+    }
+    if ((tn - tp) < mintimeDiff){
+      keep[smallest] <- 0
+    }else{
+      minThrough <- min(subF$flow[obsPits[obsPits < noww & 
+                                            obsPits > prev]])
+      if (minThrough > max(fp, fn) * (thrConst)){
+        keep[smallest] <- 0
+      }
+    }
+  }
+  isPeak <- rep(0, nrow(tt))
+  isPeak[cc$pos] <- keep
+  isPeak[ObsEA] <- 0
+  isPeak
+}
