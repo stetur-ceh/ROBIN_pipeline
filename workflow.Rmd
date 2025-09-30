@@ -147,16 +147,28 @@ vmt_pot <- lfstat::vary_threshold(lf_flow,
 
 lf_flow$threshold <- as.vector(vmt_pot)
 
-# Thresholds are computed monthly using the lfstat vary_threshold function
+# Summarise thresholds by month
 vmt_summary <- lf_flow %>% 
   dplyr::group_by(month) %>% 
   dplyr::summarise(threshold=mean(threshold))
 
+# Prepare flow data for peak extraction
 lf_flowPOT <- lf_flow
 lf_flowPOT$flow[is.na(lf_flowPOT$flow)] <- -9999
-peaks <- ilaprosUtils::extractPeaks(vecObs=lf_flowPOT$flow, mintimeDiff=7)
-pot_raw <- lf_flow[((lf_flow$flow > lf_flow$threshold) & (peaks==1)), ]
-readr::write_csv(pot_raw, paste0("./Data/POT_raw_", Station , "_", Agency, ".csv"))
+
+# Define time and observation vectors
+vecTime <- as.numeric(lf_flowPOT$date)  # or use seq_along if date is not numeric
+vecObs <- lf_flowPOT$flow
+
+# Extract peaks using custom function
+peaks <- extractPeaksX(vecTime = vecTime, vecObs = vecObs, mintimeDiff = 73, thrConst = 2/3, threshold = 0)
+
+# Filter POT events
+pot_raw <- lf_flow[(lf_flow$flow > lf_flow$threshold) & (seq_along(lf_flow$flow) %in% which(peaks == 1)), ]
+
+# Save to CSV
+readr::write_csv(pot_raw, paste0("./Data/POT_raw_", Station, "_", Agency, ".csv"))
+```
 ```
 
 Here we plot the POTs for the whole time series, and a zoomed-in version which more clearly shows the high flow thresholds.
